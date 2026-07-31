@@ -4,6 +4,7 @@
 #include <process.h>
 #include <imagehlp.h>
 #include <signal.h>
+#include <cassert>
 
 #include "System/Platform/CrashHandler.h"
 #include "System/Platform/errorhandler.h"

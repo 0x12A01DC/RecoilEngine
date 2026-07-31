@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <cassert>
 
 #include "ArchiveLoader.h"
 #include "ArchiveScanner.h"

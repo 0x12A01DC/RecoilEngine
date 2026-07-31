@@ -10,6 +10,8 @@
 
 #include <string>
 #include <functional>
+#include <cassert>
+
 
 #include "System/SpringExitCode.h"
 #include "System/Log/ILog.h"

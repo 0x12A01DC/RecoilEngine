@@ -29,6 +29,9 @@ if(PREFER_STATIC_LIBS OR MINGW)
 		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++")
 	endif (HAVE_STATIC_LIBSTDCXX_FLAG)
 endif()
+if(MSVC)
+	add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
+endif()
 add_subdirectory(pr-downloader)
 
 # add install-pr-downloader target

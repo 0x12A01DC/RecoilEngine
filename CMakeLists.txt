@@ -7,15 +7,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_MODULES_SPRING "${CMAKE_CURRENT_SOURCE_DIR}/rts/build/cmake")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_MODULES_SPRING}")
 
-# enable flag overrides for compilers
-set(CMAKE_USER_MAKE_RULES_OVERRIDE "${CMAKE_MODULES_SPRING}/OverrideFlags.cmake")
 
 project(Spring)
-
-# Force Unicode WinAPI
-if (WIN32)
-	add_definitions(-DUNICODE -D_UNICODE)
-endif()
 
 find_package(Threads REQUIRED)
 
@@ -77,13 +70,6 @@ endif()
 # By default, the libraries that don't explicitly specify SHARED/STATIC are build statically.
 # See https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html
 option(BUILD_SHARED_LIBS "Build shared (dynamic) libraries" OFF)
-
-# Tell windows to pass arguments around in @response files
-# (32k arg limit workaround)
-if    (WIN32)
-	set(CMAKE_C_USE_RESPONSE_FILE_FOR_OBJECTS 1)
-	set(CMAKE_CXX_USE_RESPONSE_FILE_FOR_OBJECTS 1)
-endif (WIN32)
 
 
 # XCode
@@ -179,24 +165,6 @@ else  (UNIX AND NOT MINGW)
 		message(WARNING "Compiling for windows. MINGWLIBS '${MINGWLIBS}' is not a valid directory, trying system libs")
 	endif ()
 
-
-	add_definitions(-D_WIN32_WINNT=0x0601) ## Win7 is minimum due to processor group affinity
-	add_definitions(-D__USE_MINGW_ANSI_STDIO=1) ## use __mingw_sprintf instead of __builtin_sprintf (it's used by lua in a synced way, and builtin doesn't sync)
-
-	if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
-		add_definitions(-DWIN32)
-	endif()
-
-	if(MSVC)
-		set (CMAKE_VS_JUST_MY_CODE_DEBUGGING 1)
-		add_definitions(-D_ENABLE_EXTENDED_ALIGNED_STORAGE)
-		add_definitions(-DNOMINMAX -DWIN32_LEAN_AND_MEAN)
-		add_compile_options(/bigobj)
-		add_compile_options(/utf-8) ## new FMT refuses to compile w/o it
-		add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>) ## define __cplusplus value properly / https://learn.microsoft.com/en-us/cpp/build/reference/zc-cplusplus?view=msvc-170
-		add_definitions(-D_ITERATOR_DEBUG_LEVEL=0) ## attempt to make debug MSVC builds faster
-		#set(EXE_FLAGS WIN32)
-	endif()
 endif (UNIX AND NOT MINGW)
 
 ## Artificial Intelligence
@@ -266,6 +234,35 @@ endif (NO_CREG)
 option(NO_SOUND "No sound output support" FALSE)
 
 if    (WIN32)
+	# Force Unicode WinAPI
+	add_definitions(-DUNICODE -D_UNICODE)
+
+	# Tell windows to pass arguments around in @response files
+	# (32k arg limit workaround)
+	set(CMAKE_C_USE_RESPONSE_FILE_FOR_OBJECTS 1)
+	set(CMAKE_CXX_USE_RESPONSE_FILE_FOR_OBJECTS 1)
+
+	add_definitions(-D_WIN32_WINNT=0x0601) ## Win7 is minimum due to processor group affinity
+
+	if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+		add_definitions(-DWIN32)
+	endif()
+
+	if(MSVC)
+		add_definitions(-DWINDOWS -D_CRT_SECURE_NO_WARNINGS)
+		add_definitions(-D_ENABLE_EXTENDED_ALIGNED_STORAGE)
+		add_definitions(-DNOMINMAX -DWIN32_LEAN_AND_MEAN)
+		add_compile_options(/bigobj)
+		add_compile_options(/utf-8) ## new FMT refuses to compile w/o it
+		add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>) ## define __cplusplus value properly / https://learn.microsoft.com/en-us/cpp/build/reference/zc-cplusplus?view=msvc-170
+		add_definitions(-D_ITERATOR_DEBUG_LEVEL=0) ## attempt to make debug MSVC builds faster
+		#set(EXE_FLAGS WIN32)
+	endif()
+
+	if(MINGW)
+		add_definitions(-D__USE_MINGW_ANSI_STDIO=1) ## use __mingw_sprintf instead of __builtin_sprintf (it's used by lua in a synced way, and builtin doesn't sync)
+	endif(MINGW)
+
 	## internal AVI recorder (w/o sound atm)
 	option(NO_AVI "Disable in-game video recording" FALSE)
 	if    (NOT NO_AVI)
@@ -384,8 +381,6 @@ else  (LDGOLD_FOUND)
 	message(WARNING "You are using ld.bfd, it's much slower than ld.gold.")
 endif (LDGOLD_FOUND)
 
-add_definitions(-D_GLIBCXX_USE_NANOSLEEP) # issue in std::chrono with gentoo and few other distros
-
 
 ### our custom OpenMP replacement
 option(THREADPOOL "Enable ThreadPools" TRUE)
@@ -420,6 +415,16 @@ if(NOT MSVC)
 		# This should produce a sane amount of warnings
 		set(DEBUG_WARNINGS "-Wall -Wno-sign-compare ${COMMON_WARNINGS}")
 	endif (DEBUG_MAX_WARNINGS)
+else(NOT MSVC)
+	set(MSVC_WARNINGS
+		/wd4018
+		/wd4146
+		/wd4244
+		/wd4305
+		/wd4711
+		/wd4838
+	)
+	add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:${MSVC_WARNINGS}>")
 endif(NOT MSVC)
 
 
@@ -521,18 +526,13 @@ set(CXX_PROFILE_DEFINES        "-DNDEBUG -DPROFILE")
 
 #### build types
 if    (MSVC)
-	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /LARGEADDRESSAWARE")
-	set(MSVC_CXX_FLAGS "${MSVC_CXX_FLAGS} /wd4146 /wd4711")
 
-	set(CMAKE_CXX_FLAGS_DEBUG           "${CMAKE_CXX_FLAGS_DEBUG}                       /MP ${MSVC_CXX_FLAGS} ${CXX_DEBUG_DEFINES}")
-	set(CMAKE_CXX_FLAGS_RELWITHDEBINFO  "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /O2 /Ob2 /GL /MP ${MSVC_CXX_FLAGS} ${CXX_RELWITHDEBINFO_DEFINES}")
-	set(CMAKE_CXX_FLAGS_RELEASE         "${CMAKE_CXX_FLAGS_RELEASE}        /O2 /Ob2 /GL /MP ${MSVC_CXX_FLAGS} ${CXX_RELEASE_DEFINES}")
-	set(CMAKE_CXX_FLAGS_PROFILE         "${CMAKE_CXX_FLAGS_PROFILE}        /O2 /Ob2 /GL /MP ${MSVC_CXX_FLAGS} ${CXX_PROFILE_DEFINES}")
-
-	set(CMAKE_EXE_LINKER_FLAGS_RELEASE        "${CMAKE_EXE_LINKER_FLAGS_RELEASE}        /LTCG")
-	set(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO} /LTCG")
-	set(CMAKE_CXX_FLAGS_PROFILE               "${CMAKE_CXX_FLAGS_PROFILE} /LTCG")
+	set(CMAKE_CXX_FLAGS_DEBUG           "${CMAKE_CXX_FLAGS_DEBUG}          ${MSVC_CXX_FLAGS} ${CXX_DEBUG_DEFINES}")
+	set(CMAKE_CXX_FLAGS_RELWITHDEBINFO  "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${MSVC_CXX_FLAGS} ${CXX_RELWITHDEBINFO_DEFINES}")
+	set(CMAKE_CXX_FLAGS_RELEASE         "${CMAKE_CXX_FLAGS_RELEASE}        ${MSVC_CXX_FLAGS} ${CXX_RELEASE_DEFINES}")
+	set(CMAKE_CXX_FLAGS_PROFILE         "${CMAKE_CXX_FLAGS_PROFILE}        ${MSVC_CXX_FLAGS} ${CXX_PROFILE_DEFINES}")
 else  (MSVC)
+	add_definitions(-D_GLIBCXX_USE_NANOSLEEP) # issue in std::chrono with gentoo and few other distros
 	if (CMAKE_COMPILER_IS_GNUCXX)
 		# -fsingle-precision-constant: treat FP constants as float, not double (GCC-only)
 		# -frounding-math: honor runtime rounding mode (GCC-only)
